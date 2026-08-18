@@ -1,0 +1,40 @@
+version: '3.3'
+services:
+  mongoAtlas:
+    hostname: mongodb
+    image: mongodb/mongodb-atlas-local
+    container_name: mongodb_atlas
+    volumes:
+      - mongo-atlas-data:/data/db
+      - mongo-atlas-config:/data/configdb
+    networks:
+      - dandjoo
+
+
+  geoserver:
+    image: kartoza/geoserver
+    container_name: dandjoo_geoserver
+    volumes:
+      - geoserver-data:/opt/geoserver/data_dir
+    networks:
+      - dandjoo
+
+  cli:
+    build:
+      context: .
+      dockerfile: ./docker/cli/Dockerfile
+    container_name: dandjoo_cli
+    profiles: ["cli-only"]
+    networks:
+      - dandjoo
+
+volumes:
+  geoserver-data:
+  mongo-atlas-data:
+    driver: local
+  mongo-atlas-config:
+    driver: local
+
+networks:
+  dandjoo:
+    driver: bridge

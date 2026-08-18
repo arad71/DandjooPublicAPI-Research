@@ -1,0 +1,21 @@
+version: '3.3'
+services:
+  mongoAtlas:
+    ports:
+      - 27017:27017
+
+  geoserver:
+    environment:
+      GEOSERVER_ADMIN_USER: admin
+      GEOSERVER_ADMIN_PASSWORD: geoserver
+    ports:
+      - 8080:8080
+
+  redis:
+    container_name: dandjoo_redis
+    image: 'redis:7.2.0'
+    command: /bin/sh -c "redis-server --requirepass ${REDIS_PASSWORD}"
+    networks:
+      - dandjoo
+    ports:
+      - 6379:6379

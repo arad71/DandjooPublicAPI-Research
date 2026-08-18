@@ -1,0 +1,185 @@
+#PROD PROD PROD PROD PROD PROD PROD PROD PROD PROD PROD PROD PROD PROD 
+
+
+upstream authz_web {
+    server authz-prod-service.bio-prod:${AUTHZ_PORT};   #8010
+}
+
+upstream public_api {
+    server dandjoo-prod-public-api-service.bio-prod:${API_PORT};     #8000
+}
+
+upstream curation_api {
+    server dandjoo-prod-curation-api-service.bio-prod:${CURATION_API_PORT};     #8090
+}
+
+upstream geoserver {
+    server dandjoo-prod-geoserver-service.bio-prod:${GEOSERVER_PORT};   #8080
+}
+
+# upstream mx-public {
+#     server dandjoo-prod-mx-public-service.bio-prod:${MX_PUBLIC_PORT};   #8081
+# }
+
+# upstream mx-curation {
+#     server dandjoo-prod-mx-curation-service.bio-prod:${MX_CURATION_PORT};   #8083
+# }
+
+#nomos deployments
+upstream nomos-backend{
+	server nomos-prod-backend-api-service.bio-prod:${NOMOS_BACKEND_API_PORT};	#8888	
+}
+
+upstream nomos-frontend{
+	server nomos-prod-frontend-service.bio-prod:${NOMOS_FRONTEND_PORT}; #3000
+}
+#nomos end
+
+server {
+    listen 80;
+    server_name dandjoo.bio.wa.gov.au;
+	root /usr/share/nginx/html/dandjoo.bio.wa.gov.au/;
+
+    # Uploads can be very large, so apply an upper limit of 500 megabytes
+    client_max_body_size 500M;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    location /api/ {
+        # strip out /api/ as fastapi will append this via root_path
+        rewrite ^/api/(.*)$ /$1 break;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://public_api;
+
+        # several hours may be required to upload large submissions
+        proxy_connect_timeout 7200s;
+        proxy_send_timeout 7200s;
+        proxy_read_timeout 7200s;
+        send_timeout 7200s;
+    }
+
+    #authz on a subpath re-write
+    location /authz/ {
+		rewrite ^/authz/(.*)$ https://authz.bio.wa.gov.au/$1 redirect;
+    }
+	#authz on a subpath end
+	
+    # location /mx-public/ {
+	# 	proxy_set_header Host $host;
+	# 	#rewrite ^/mx-public/(.*)$ /$1 break;
+    #     proxy_pass http://mx-public;
+    # }
+	
+	# location /mx-curation/ {
+	# 	proxy_set_header Host $host;
+	# 	#rewrite ^/mx-curation/(.*)$ /$1 break;
+    #     proxy_pass http://mx-curation;
+    # }
+	
+    location /geoserver/ {
+	
+		proxy_pass http://geoserver;
+		
+		proxy_set_header    Host            $host;
+		proxy_set_header X-Real-IP $remote_addr;
+		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+		#proxy_redirect off;
+		
+        #proxy_set_header    X-Real-IP       $remote_addr;
+        #proxy_set_header    X-Forwarded-for $remote_addr;
+        #port_in_redirect off;
+        #proxy_connect_timeout 600;
+        proxy_set_header X-Script-Name /geoserver;
+    }
+	
+
+    # web client
+    location / {
+        
+        index  index.html;
+        try_files $uri $uri/ /index.html?$args;
+    }
+
+    access_log off;
+    error_log /var/log/nginx/error.log error;
+}
+
+server {
+    listen 80;
+    server_name nomos.bio.wa.gov.au; 
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+	
+    location / {
+        proxy_set_header X-Forwarded-Host $host;
+	    proxy_set_header X-Forwarded-Server $host;
+	    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+	    proxy_pass http://nomos-frontend;
+
+        proxy_redirect off;
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    location /api {
+	    proxy_pass http://nomos-backend/api;
+	}
+	    
+	access_log off;
+	error_log /var/log/nginx/error.log error;
+}
+
+server {
+	listen 80;
+	server_name curation.bio.wa.gov.au;
+	root /usr/share/nginx/html/curation.bio.wa.gov.au/;	
+	client_max_body_size 500M;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+	
+	location / {
+		index  index.html;
+		try_files $uri $uri/ /index.html?$args;
+	}
+	
+	# resovled the issue with accessing '/api/docs', previously was set to '/api'
+	location ~ /api/?(.*)$ {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://curation_api;
+		
+		# several hours may be required to upload large submissions
+        proxy_connect_timeout 7200s;
+        proxy_send_timeout 7200s;
+        proxy_read_timeout 7200s;
+        send_timeout 7200s;
+	}
+		
+	access_log off;
+	error_log /var/log/nginx/error.log error;
+}
+
+server {
+	listen 80;
+	server_name authz.bio.wa.gov.au;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    location /{
+        proxy_set_header Host $host;
+        proxy_pass http://authz_web;
+    }
+    
+    location /static/ {
+        alias /usr/share/nginx/html/authz.bio.wa.gov.au/static/;
+    }
+
+    access_log off;
+	error_log /var/log/nginx/error.log error;	
+}

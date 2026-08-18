@@ -1,0 +1,38 @@
+upstream fastapi_server {
+    server ${API_HOST}:${API_PORT};
+}
+
+server {
+    listen 80;
+    server_name *.bdr.wa.gov.au;
+
+    # Uploads can be very large, so apply an upper limit of 500 megabytes
+    client_max_body_size 500M;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    location /api/ {
+        # strip out /api/ as fastapi will append this via root_path
+        rewrite ^/api/(.*)$ /$1 break;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://fastapi_server;
+
+        # several hours may be required to upload large submissions
+        proxy_connect_timeout 7200s;
+        proxy_send_timeout 7200s;
+        proxy_read_timeout 7200s;
+        send_timeout 7200s;
+    }
+
+    # web client
+    location / {
+        root /usr/share/nginx/html/;
+        index  index.html;
+        try_files $uri $uri/ /index.html?$args;
+    }
+
+    access_log off;
+    error_log /var/log/nginx/error.log error;
+}

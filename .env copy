@@ -1,0 +1,5 @@
+DANDJOO_CURATION_API_URL=https://curation.api.yourdomain.com
+AUTHZ_API_URL=https://authz.api.yourdomain.com
+REDIS_PASSWORD=supersecret
+REDIS_HOST=redis.internal
+REDIS_PORT=6379
